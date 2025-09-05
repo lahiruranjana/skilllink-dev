@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [dev, main]
+  push:
+    branches: [dev]
+
+permissions:
+  contents: read
+
+jobs:
+  # .NET backend in "backend/" (your screenshot shows this)
+  build-test-backend:
+    if: ${{ hashFiles('backend/**/*.csproj') != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        working-directory: backend
+        run: dotnet restore
+
+      - name: Build
+        working-directory: backend
+        run: dotnet build --configuration Release --no-restore
+
+      - name: Test
+        working-directory: backend
+        run: dotnet test --no-build --verbosity normal
+
+  # .NET backend in "api/" (in case you rename later)
+  build-test-api:
+    if: ${{ hashFiles('api/**/*.csproj') != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        working-directory: api
+        run: dotnet restore
+
+      - name: Build
+        working-directory: api
+        run: dotnet build --configuration Release --no-restore
+
+      - name: Test
+        working-directory: api
+        run: dotnet test --no-build --verbosity normal
+
+  # React/Vite frontend in "frontend/"
+  build-test-frontend:
+    if: ${{ hashFiles('frontend/package.json') != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'frontend/package-lock.json'
+
+      - name: Install deps
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build (Vite)
+        working-directory: frontend
+        run: npm run build
+
+      # uncomment if you add frontend unit tests later
+      # - name: Test (Jest/Vitest)
+      #   working-directory: frontend
+      #   run: npm test -- --ci --reporter=default
