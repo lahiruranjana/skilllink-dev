@@ -1,0 +1,92 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [dev, main]
+  push:
+    branches: [dev]
+
+permissions:
+  contents: read
+
+jobs:
+  build-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      # ⬇️ Find the solution or first csproj automatically
+      - name: Find .NET project
+        id: findproj
+        shell: bash
+        run: |
+          set -e
+          if ls *.sln 1>/dev/null 2>&1; then
+            FILE="$(ls *.sln | head -n1)"
+            echo "type=sln"   >> $GITHUB_OUTPUT
+            echo "file=$FILE" >> $GITHUB_OUTPUT
+            echo "path=."     >> $GITHUB_OUTPUT
+          else
+            FILE="$(git ls-files '**/*.csproj' | head -n1)"
+            if [ -z "$FILE" ]; then
+              echo "No .sln or .csproj found" >&2
+              exit 1
+            fi
+            echo "type=csproj"                >> $GITHUB_OUTPUT
+            echo "file=$FILE"                 >> $GITHUB_OUTPUT
+            echo "path=$(dirname "$FILE")"    >> $GITHUB_OUTPUT
+          fi
+          echo "Found: $FILE"
+
+      - name: Restore
+        run: dotnet restore "${{ steps.findproj.outputs.file }}"
+
+      - name: Build
+        run: dotnet build "${{ steps.findproj.outputs.file }}" --configuration Release --no-restore
+
+      - name: Test (if any *Tests.csproj exist)
+        shell: bash
+        run: |
+          set -e
+          TESTS=$(git ls-files '**/*Tests.csproj' || true)
+          if [ -z "$TESTS" ]; then
+            echo "No test projects found, skipping"
+          else
+            for proj in $TESTS; do
+              echo "Running tests in $proj"
+              dotnet test "$proj" --no-build --verbosity normal
+            done
+          fi
+
+  build-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Check for frontend
+        id: check_frontend
+        run: |
+          if [ ! -f frontend/package.json ]; then
+            echo "no-frontend=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Install deps
+        if: steps.check_frontend.outputs.no-frontend != 'true'
+        working-directory: frontend
+        run: |
+          if [ -f package-lock.json ]; then npm ci; else npm install; fi
+
+      - name: Build (skip if no frontend)
+        if: steps.check_frontend.outputs.no-frontend != 'true'
+        working-directory: frontend
+        run: npm run build || echo "No build script, skipping"
