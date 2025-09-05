@@ -6,6 +6,9 @@ on:
   push:
     branches: [dev]
 
+permissions:
+  contents: read
+
 jobs:
   build-backend:
     runs-on: ubuntu-latest
@@ -17,26 +20,48 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
+      # ⬇️ Find the solution or first csproj automatically
+      - name: Find .NET project
+        id: findproj
+        shell: bash
+        run: |
+          set -e
+          if ls *.sln 1>/dev/null 2>&1; then
+            FILE="$(ls *.sln | head -n1)"
+            echo "type=sln"   >> $GITHUB_OUTPUT
+            echo "file=$FILE" >> $GITHUB_OUTPUT
+            echo "path=."     >> $GITHUB_OUTPUT
+          else
+            FILE="$(git ls-files '**/*.csproj' | head -n1)"
+            if [ -z "$FILE" ]; then
+              echo "No .sln or .csproj found" >&2
+              exit 1
+            fi
+            echo "type=csproj"                >> $GITHUB_OUTPUT
+            echo "file=$FILE"                 >> $GITHUB_OUTPUT
+            echo "path=$(dirname "$FILE")"    >> $GITHUB_OUTPUT
+          fi
+          echo "Found: $FILE"
+
       - name: Restore
-        working-directory: backend
-        run: dotnet restore
+        run: dotnet restore "${{ steps.findproj.outputs.file }}"
 
       - name: Build
-        working-directory: backend
-        run: dotnet build --configuration Release --no-restore
+        run: dotnet build "${{ steps.findproj.outputs.file }}" --configuration Release --no-restore
 
-      # Only run tests if any exist
-      - name: Test (if test projects exist)
+      - name: Test (if any *Tests.csproj exist)
+        shell: bash
         run: |
-          if ls **/*Tests.csproj 1> /dev/null 2>&1; then
-            for proj in $(ls **/*Tests.csproj); do
+          set -e
+          TESTS=$(git ls-files '**/*Tests.csproj' || true)
+          if [ -z "$TESTS" ]; then
+            echo "No test projects found, skipping"
+          else
+            for proj in $TESTS; do
               echo "Running tests in $proj"
               dotnet test "$proj" --no-build --verbosity normal
             done
-          else
-            echo "No test projects found, skipping"
           fi
-        shell: bash
 
   build-frontend:
     runs-on: ubuntu-latest
@@ -59,11 +84,7 @@ jobs:
         if: steps.check_frontend.outputs.no-frontend != 'true'
         working-directory: frontend
         run: |
-          if [ -f package-lock.json ]; then
-            npm ci
-          else
-            npm install
-          fi
+          if [ -f package-lock.json ]; then npm ci; else npm install; fi
 
       - name: Build (skip if no frontend)
         if: steps.check_frontend.outputs.no-frontend != 'true'
