@@ -6,8 +6,11 @@ on:
   push:
     branches: [dev]
 
+permissions:
+  contents: read
+
 jobs:
-  build-test-backend:
+  build-backend:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -25,11 +28,18 @@ jobs:
         working-directory: backend
         run: dotnet build --configuration Release --no-restore
 
-      - name: Test
-        working-directory: backend
-        run: dotnet test --no-build --verbosity normal
+      # Run tests only if any *Tests.csproj exists anywhere
+      - name: Test (if test projects exist)
+        if: ${{ hashFiles('**/*Tests.csproj') != '' }}
+        run: |
+          # Find and run each test project
+          for proj in $(git ls-files '**/*Tests.csproj'); do
+            echo "Running tests in $proj"
+            dotnet test "$proj" --no-build --verbosity normal
+          done
+        shell: bash
 
-  build-test-frontend:
+  build-frontend:
     if: ${{ hashFiles('frontend/package.json') != '' }}
     runs-on: ubuntu-latest
     steps:
@@ -39,12 +49,15 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: 'frontend/package-lock.json'
 
-      - name: Install deps
+      - name: Install deps (works with or without lockfile)
         working-directory: frontend
-        run: npm ci
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
 
       - name: Build (Vite)
         working-directory: frontend
