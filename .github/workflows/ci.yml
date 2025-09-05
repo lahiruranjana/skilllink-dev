@@ -17,9 +17,6 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      - name: Show dotnet info
-        run: dotnet --info
-
       - name: Restore
         working-directory: backend
         run: dotnet restore
@@ -28,8 +25,20 @@ jobs:
         working-directory: backend
         run: dotnet build --configuration Release --no-restore
 
+      # Only run tests if any exist
+      - name: Test (if test projects exist)
+        run: |
+          if ls **/*Tests.csproj 1> /dev/null 2>&1; then
+            for proj in $(ls **/*Tests.csproj); do
+              echo "Running tests in $proj"
+              dotnet test "$proj" --no-build --verbosity normal
+            done
+          else
+            echo "No test projects found, skipping"
+          fi
+        shell: bash
+
   build-frontend:
-    if: ${{ hashFiles('frontend/package.json') != '' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -39,7 +48,15 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Install deps (lockfile optional)
+      - name: Check for frontend
+        id: check_frontend
+        run: |
+          if [ ! -f frontend/package.json ]; then
+            echo "no-frontend=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Install deps
+        if: steps.check_frontend.outputs.no-frontend != 'true'
         working-directory: frontend
         run: |
           if [ -f package-lock.json ]; then
@@ -48,6 +65,7 @@ jobs:
             npm install
           fi
 
-      - name: Build (skip if no script)
+      - name: Build (skip if no frontend)
+        if: steps.check_frontend.outputs.no-frontend != 'true'
         working-directory: frontend
         run: npm run build || echo "No build script, skipping"
