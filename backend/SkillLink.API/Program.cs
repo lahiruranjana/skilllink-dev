@@ -16,7 +16,7 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-// Pipeline
+// Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -24,7 +24,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-app.UseCors(AllowDev); // <-- add this
+app.UseCors(AllowDev); // allow frontend dev origin
 
 var summaries = new[]
 {
@@ -38,7 +38,9 @@ app.MapGet("/weatherforecast", () =>
             DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
             Random.Shared.Next(-20, 55),
             summaries[Random.Shared.Next(summaries.Length)]
-        )).ToArray();
+        )
+    ).ToArray();
+
     return forecast;
 })
 .WithName("GetWeatherForecast")
