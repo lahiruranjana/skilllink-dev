@@ -49,19 +49,9 @@ jobs:
       - name: Build
         run: dotnet build "${{ steps.findproj.outputs.file }}" --configuration Release --no-restore
 
-      - name: Test (if any *Tests.csproj exist)
-        shell: bash
-        run: |
-          set -e
-          TESTS=$(git ls-files '**/*Tests.csproj' || true)
-          if [ -z "$TESTS" ]; then
-            echo "No test projects found, skipping"
-          else
-            for proj in $TESTS; do
-              echo "Running tests in $proj"
-              dotnet test "$proj" --no-build --verbosity normal
-            done
-          fi
+      -  name: Test (backend)
+         run: dotnet test backend/SkillLink.sln --no-build --verbosity normal
+
 
   build-frontend:
     runs-on: ubuntu-latest
