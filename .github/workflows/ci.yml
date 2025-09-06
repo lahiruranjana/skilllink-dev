@@ -49,8 +49,9 @@ jobs:
       - name: Build
         run: dotnet build "${{ steps.findproj.outputs.file }}" --configuration Release --no-restore
 
-      -  name: Test (backend)
-         run: dotnet test backend/SkillLink.sln --no-build --verbosity normal
+      - name: Test (backend)
+        run: dotnet test backend/tests/SkillLink.API.Tests/SkillLink.API.Tests.csproj --no-build --verbosity normal
+
 
 
   build-frontend:
