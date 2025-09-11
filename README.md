@@ -20,4 +20,4 @@ It allows students to **offer skills**, **request help**, **schedule sessions**,
 - **CI/CD**: GitHub Actions (build → test → deploy)  
 - **Testing**: xUnit (.NET), Jest (React), Selenium, JMeter
 
-## 📂 Repository Structure
+
