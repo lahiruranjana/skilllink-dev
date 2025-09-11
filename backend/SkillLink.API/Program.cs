@@ -1,56 +1,93 @@
+using SkillLink.API.Services;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
+using Microsoft.AspNetCore.Authorization;
+using System.Security.Claims;
+
+
+
 var builder = WebApplication.CreateBuilder(args);
 
-// Services
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+// Add services
+builder.Services.AddSingleton<DbHelper>();
+builder.Services.AddScoped<RequestService>();
+builder.Services.AddScoped<SessionService>();
+builder.Services.AddScoped<AuthService>();
+builder.Services.AddScoped<SkillService>();
+builder.Services.AddScoped<AcceptedRequestService>();
+builder.Services.AddScoped<AdminService>();
+//builder.Services.AddScoped<EmailService>();
+builder.Services.AddSingleton<EmailService>();
 
-// CORS for local frontend
-var AllowDev = "_AllowDev";
+
+
+
+
+builder.Services.AddControllers();
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddOpenApi(); // OpenAPI docs
+
+// JWT Authentication
+var jwtSettings = builder.Configuration.GetSection("Jwt");
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+})
+.AddJwtBearer(options =>
+{
+    options.TokenValidationParameters = new TokenValidationParameters
+    {
+        ValidateIssuer = true,
+        ValidateAudience = true,
+        ValidateLifetime = true,
+        ValidateIssuerSigningKey = true,
+        ValidIssuer = jwtSettings["Issuer"],
+        ValidAudience = jwtSettings["Audience"],
+        IssuerSigningKey = new SymmetricSecurityKey(
+            Encoding.UTF8.GetBytes(jwtSettings["Key"]!)
+        ),
+        RoleClaimType = ClaimTypes.Role
+    };
+});
+
+var MyAllowSpecificOrigins = "_myAllowSpecificOrigins";
+
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy(name: AllowDev, policy =>
-        policy.WithOrigins("http://localhost:5173", "https://localhost:5173")
-              .AllowAnyHeader()
-              .AllowAnyMethod());
+    options.AddPolicy(name: MyAllowSpecificOrigins,
+        policy =>
+        {
+            policy.WithOrigins("http://localhost:3000") // frontend URL
+                  .AllowAnyHeader()
+                  .AllowAnyMethod();
+        });
 });
+
+
+builder.Services.AddSignalR();
+
+
+
+
+builder.Services.AddAuthorization();
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
+// Middleware order
 if (app.Environment.IsDevelopment())
 {
-    app.UseSwagger();
-    app.UseSwaggerUI();
+    app.MapOpenApi(); // Swagger/OpenAPI UI
 }
-
+app.UseCors(MyAllowSpecificOrigins);
 app.UseHttpsRedirection();
-app.UseCors(AllowDev); // allow frontend dev origin
+app.UseStaticFiles(); // enables serving wwwroot files
 
-var summaries = new[]
-{
-    "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-};
 
-app.MapGet("/weatherforecast", () =>
-{
-    var forecast = Enumerable.Range(1, 5).Select(index =>
-        new WeatherForecast(
-            DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-            Random.Shared.Next(-20, 55),
-            summaries[Random.Shared.Next(summaries.Length)]
-        )
-    ).ToArray();
+app.UseAuthentication();
+app.UseAuthorization();
 
-    return forecast;
-})
-.WithName("GetWeatherForecast")
-.WithOpenApi();
-
-app.MapGet("/health", () => Results.Ok(new { status = "ok", time = DateTime.UtcNow }));
+app.MapControllers();
 
 app.Run();
-
-record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
-{
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
-}
